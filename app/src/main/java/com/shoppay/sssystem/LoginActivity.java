@@ -325,7 +325,6 @@ public class LoginActivity extends Activity implements View.OnClickListener{
     }
 
     public void obtaindayin() {
-        dialog.show();
         AsyncHttpClient client = new AsyncHttpClient();
         final PersistentCookieStore myCookieStore = new PersistentCookieStore(this);
         client.setCookieStore(myCookieStore);
@@ -336,7 +335,6 @@ public class LoginActivity extends Activity implements View.OnClickListener{
             public void onSuccess(int statusCode, Header[] headers, byte[] responseBody)
             {
                 try {
-                    dialog.dismiss();
                     Log.d("xxdayinS",new String(responseBody,"UTF-8"));
                     JSONObject jso=new JSONObject(new String(responseBody,"UTF-8"));
                     if(jso.getBoolean("success")){
@@ -358,14 +356,12 @@ public class LoginActivity extends Activity implements View.OnClickListener{
                     }else{
                     }
                 }catch (Exception e){
-                    dialog.dismiss();
                 }
             }
 
             @Override
             public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error)
             {
-                dialog.dismiss();
             }
         });
     }
