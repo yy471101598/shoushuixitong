@@ -78,7 +78,7 @@ public class HomeActivity extends Activity {
                         break;
                     case 1:
                         if (AppAuthority.contains("2")) {
-                            Intent intent1 = new Intent(ac, VipXiaofeiActivity.class);
+                            Intent intent1 = new Intent(ac, FastConsumptionActivity.class);
                             startActivity(intent1);
                         } else {
                             Toast.makeText(ac, "没有该权限", Toast.LENGTH_SHORT).show();
