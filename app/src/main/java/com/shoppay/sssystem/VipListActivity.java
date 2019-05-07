@@ -2,9 +2,14 @@ package com.shoppay.sssystem;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.nfc.NfcAdapter;
+import android.nfc.Tag;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
@@ -24,7 +29,9 @@ import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.loopj.android.http.PersistentCookieStore;
 import com.loopj.android.http.RequestParams;
 import com.shoppay.sssystem.adapter.ViplistAdapter;
+import com.shoppay.sssystem.bean.VipInfo;
 import com.shoppay.sssystem.bean.VipList;
+import com.shoppay.sssystem.card.ReadCardOpt;
 import com.shoppay.sssystem.tools.ActivityStack;
 import com.shoppay.sssystem.tools.CommonUtils;
 import com.shoppay.sssystem.tools.DialogUtil;
@@ -56,6 +63,23 @@ public class VipListActivity extends Activity implements View.OnClickListener {
     private int mindex = 1;
     private PullToRefreshListView mPullRefreshListView;
     private int num = 10;
+    private NfcAdapter mAdapter;
+    private PendingIntent mPendingIntent;
+
+    private Handler handler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            switch (msg.what) {
+                case 5:
+                    String card = msg.obj.toString();
+                    Log.d("xxxx", card);
+                    et_chose.setText(card);
+                    break;
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -64,9 +88,16 @@ public class VipListActivity extends Activity implements View.OnClickListener {
         dialog = DialogUtil.loadingDialog(VipListActivity.this, 1);
         ActivityStack.create().addActivity(VipListActivity.this);
         initView();
-        list=new ArrayList<VipList>();
+        list = new ArrayList<VipList>();
         adapter = new ViplistAdapter(getApplicationContext(), list);
         mPullRefreshListView.setAdapter(adapter);
+
+        Intent nfcIntent = new Intent(this, getClass());
+        nfcIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        mPendingIntent =
+                PendingIntent.getActivity(this, 0, nfcIntent, 0);
+        // 获取默认的NFC控制器
+        mAdapter = NfcAdapter.getDefaultAdapter(this);
         mPullRefreshListView
                 .setOnRefreshListener(new PullToRefreshBase.OnRefreshListener2<ListView>() {
                     @Override
@@ -91,25 +122,85 @@ public class VipListActivity extends Activity implements View.OnClickListener {
         mPullRefreshListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                  VipList vipList=(VipList) adapterView.getItemAtPosition(i);
-                Intent intent=new Intent(VipListActivity.this,VipDetailActivity.class);
-                intent.putExtra("viplist",vipList);
+                VipList vipList = (VipList) adapterView.getItemAtPosition(i);
+                Intent intent = new Intent(VipListActivity.this, VipDetailActivity.class);
+                intent.putExtra("viplist", vipList);
                 startActivity(intent);
             }
         });
     }
 
+
+    //获取系统隐式启动的
+    @Override
+    public void onNewIntent(Intent intent) {
+        Tag tagFromIntent = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+        if (tagFromIntent != null) {
+            String CardId = ByteArrayToHex(tagFromIntent.getId());
+            if (null != CardId) {
+                Log.d("xxnfccard", Long.parseLong(CardId, 16) + "");
+                Message msg = handler.obtainMessage();
+                msg.what = 5;
+                msg.obj = CardId;
+                handler.sendMessage(msg);
+            }
+        }
+    }
+
+
+    public static String ByteArrayToHex(byte[] inarray) {
+        int i, j, in;
+        String[] hex = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"};
+        String out = "";
+
+        for (j = 0; j < inarray.length; ++j) {
+            in = (int) inarray[j] & 0xff;
+            i = (in >> 4) & 0x0f;
+            out += hex[i];
+            i = in & 0x0f;
+            out += hex[i];
+        }
+        long x = Long.parseLong(out, 16);
+//        int x = Integer.parseInt(out,16);
+        out = String.format("%010d", x);
+        return out;
+    }
+
+
     @Override
     protected void onResume() {
         super.onResume();
-        mindex=1;
+        mindex = 1;
         obtainViplist(1, 0);
+        new ReadCardOpt(et_chose);
+        if (mAdapter == null) {
+            Toast.makeText(ac, "该设备不支持NFC功能", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!mAdapter.isEnabled()) {
+            Toast.makeText(ac, "请在系统设置中先启用NFC功能", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (mAdapter != null) {
+            //隐式启动
+            mAdapter.enableForegroundDispatch(this, mPendingIntent, null, null);
+        }
     }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (mAdapter != null) {
+            //隐式启动
+            mAdapter.disableForegroundDispatch(this);
+        }
+    }
+
 
     /**
      * @param index
-     * @param state
-     *            0：第一次 1：刷新 2上拉加载 3搜索
+     * @param state 0：第一次 1：刷新 2上拉加载 3搜索
      */
     private void obtainViplist(int index, final int state) {
         // TODO Auto-generated method stub
@@ -122,82 +213,80 @@ public class VipListActivity extends Activity implements View.OnClickListener {
 //        姓名（模糊）
 //        电话（完整）
 //        卡面号（完整）
-        params.put("memCard",et_chose.getText().toString());
-        params.put("index",index);
-        params.put("size",num);
-        Log.d("xx",params.toString());
-        client.post( PreferenceHelper.readString(ac, "shoppay", "yuming", "123") + "/mobile/app/api/appAPI.ashx?Method=AppGetMemBriefList", params, new AsyncHttpResponseHandler()
-        {
+        params.put("memCard", et_chose.getText().toString());
+        params.put("index", index);
+        params.put("size", num);
+        Log.d("xx", params.toString());
+        client.post(PreferenceHelper.readString(ac, "shoppay", "yuming", "123") + "/mobile/app/api/appAPI.ashx?Method=AppGetMemBriefList", params, new AsyncHttpResponseHandler() {
             @Override
-            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody)
-            {
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody) {
                 try {
                     dialog.dismiss();
-                    LogUtils.d("xxVipListS",new String(responseBody,"UTF-8"));
-                    JSONObject jso=new JSONObject(new String(responseBody,"UTF-8"));
-                    if(jso.getBoolean("success")){
-                            mPullRefreshListView.onRefreshComplete();
-                      JSONObject jo= jso.getJSONObject("data");
+                    LogUtils.d("xxVipListS", new String(responseBody, "UTF-8"));
+                    JSONObject jso = new JSONObject(new String(responseBody, "UTF-8"));
+                    if (jso.getBoolean("success")) {
+                        mPullRefreshListView.onRefreshComplete();
+                        JSONObject jo = jso.getJSONObject("data");
                         Gson gson = new Gson();
-                        Type listType = new TypeToken<List<VipList>>(){}.getType();
+                        Type listType = new TypeToken<List<VipList>>() {
+                        }.getType();
                         List<VipList> viplist = gson.fromJson(jo.getString("list"), listType);
-                        tv_vipnum.setText("共"+jo.getLong("pageCounts")+"位会员");
-                            if (jo.getLong("pageCounts") == 0) {
-                                if (state == 2) {// 加载
-                                    if (list.size() > 0) {
-                                        mindex = mindex - 1;
-                                    } else {
-                                        mindex = mindex - 1;
-                                        list.clear();
-                                        adapter.notifyDataSetChanged();
-                                    }
+                        tv_vipnum.setText("共" + jo.getLong("pageCounts") + "位会员");
+                        if (jo.getLong("pageCounts") == 0) {
+                            if (state == 2) {// 加载
+                                if (list.size() > 0) {
+                                    mindex = mindex - 1;
                                 } else {
+                                    mindex = mindex - 1;
                                     list.clear();
                                     adapter.notifyDataSetChanged();
                                 }
                             } else {
-                                if (state == 0) {
-                                    mindex = 1;
-                                    list.clear();
-                                    list.addAll(viplist);
-                                    adapter.notifyDataSetChanged();
-                                } else if (state == 1) {
-                                    mindex = 1;// 刷新
-                                    list.clear();
-                                    list.addAll(viplist);
-                                    adapter.notifyDataSetChanged();
-                                    // 调用该方法结束刷新，否则加载圈会一直在
-                                    mPullRefreshListView
-                                            .onRefreshComplete();
-                                } else if (state == 2) {// 加载
-                                    list.addAll(viplist);
-                                    adapter.notifyDataSetChanged();
-                                    // 加载完后调用该方法
-                                    mPullRefreshListView
-                                            .onRefreshComplete();
-                                } else {
-                                    list.clear();
-                                    list.addAll(viplist);
-                                    adapter.notifyDataSetChanged();
-                                    // 调用该方法结束刷新，否则加载圈会一直在
-                                    mPullRefreshListView
-                                            .onRefreshComplete();
-                                }
+                                list.clear();
+                                adapter.notifyDataSetChanged();
                             }
-                    }else{
+                        } else {
+                            if (state == 0) {
+                                mindex = 1;
+                                list.clear();
+                                list.addAll(viplist);
+                                adapter.notifyDataSetChanged();
+                            } else if (state == 1) {
+                                mindex = 1;// 刷新
+                                list.clear();
+                                list.addAll(viplist);
+                                adapter.notifyDataSetChanged();
+                                // 调用该方法结束刷新，否则加载圈会一直在
+                                mPullRefreshListView
+                                        .onRefreshComplete();
+                            } else if (state == 2) {// 加载
+                                list.addAll(viplist);
+                                adapter.notifyDataSetChanged();
+                                // 加载完后调用该方法
+                                mPullRefreshListView
+                                        .onRefreshComplete();
+                            } else {
+                                list.clear();
+                                list.addAll(viplist);
+                                adapter.notifyDataSetChanged();
+                                // 调用该方法结束刷新，否则加载圈会一直在
+                                mPullRefreshListView
+                                        .onRefreshComplete();
+                            }
+                        }
+                    } else {
                         mindex = mindex - 1;
                         adapter.notifyDataSetChanged();
                         mPullRefreshListView.onRefreshComplete();
                     }
-                }catch (Exception e){
+                } catch (Exception e) {
                 }
             }
 
             @Override
-            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error)
-            {
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error) {
                 dialog.dismiss();
-                LogUtils.d("xxVipInfoE",new String(responseBody));
+                LogUtils.d("xxVipInfoE", new String(responseBody));
                 mindex = mindex - 1;
                 Toast.makeText(getApplicationContext(), "服务器异常，请稍后再试",
                         Toast.LENGTH_SHORT).show();
@@ -212,9 +301,9 @@ public class VipListActivity extends Activity implements View.OnClickListener {
         et_chose = (EditText) findViewById(R.id.viplist_et_search);
         tv_title = (TextView) findViewById(R.id.tv_title);
         tv_vipnum = (TextView) findViewById(R.id.viplist_tv_num);
-        listView= (ListView) findViewById(R.id.listview);
-        img_chose= (ImageView) findViewById(R.id.viplist_img_search);
-         mPullRefreshListView= (PullToRefreshListView) findViewById(R.id.pull_refresh_list);
+        listView = (ListView) findViewById(R.id.listview);
+        img_chose = (ImageView) findViewById(R.id.viplist_img_search);
+        mPullRefreshListView = (PullToRefreshListView) findViewById(R.id.pull_refresh_list);
         tv_title.setText("查询");
 
         rl_left.setOnClickListener(this);
@@ -234,17 +323,17 @@ public class VipListActivity extends Activity implements View.OnClickListener {
 //                            Toast.LENGTH_SHORT).show();
 //                }
 //                else {
-                    if (CommonUtils.checkNet(getApplicationContext())) {
-                        try {
-                            mindex=1;
-                            obtainViplist(1,1);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    } else {
-                        Toast.makeText(getApplicationContext(), "请检查网络是否可用",
-                                Toast.LENGTH_SHORT).show();
+                if (CommonUtils.checkNet(getApplicationContext())) {
+                    try {
+                        mindex = 1;
+                        obtainViplist(1, 1);
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
+                } else {
+                    Toast.makeText(getApplicationContext(), "请检查网络是否可用",
+                            Toast.LENGTH_SHORT).show();
+                }
 //                }
                 break;
 
