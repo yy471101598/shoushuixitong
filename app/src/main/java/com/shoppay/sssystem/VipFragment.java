@@ -71,7 +71,7 @@ public class VipFragment extends Fragment implements View.OnClickListener {
     private EditText et_card, et_xfmoney, et_zfmoney, et_yuemoney, et_jfmoney;
     private TextView tv_vipname, tv_vipjf, tv_zhmoney, tv_maxdk, tv_dkmoney, tv_obtainjf, tv_money, tv_yue, tv_jf, tv_vipyue, tv_wx, tv_jiesuan;
     private RelativeLayout rl_money, rl_yue, rl_jf, rl_jiesuan, rl_jifen;
-    private boolean isMoney = true, isYue = false, isJifen = false, isWx = false;
+    private boolean isMoney = false, isYue = true, isJifen = false, isWx = false;
     private RelativeLayout rl_pay_money, rl_pay_yue, rl_pay_jifen, rl_pay_jifenmaxdk, rl_pay_jifendkm, rl_wx;
     private String editString;
     private Dialog dialog;

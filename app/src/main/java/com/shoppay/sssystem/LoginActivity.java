@@ -70,7 +70,6 @@ public class LoginActivity extends Activity implements View.OnClickListener{
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
         ac=this;
-        Log.d("xxx",String.format("%010d",56789));
         ActivityStack.create().addActivity(ac);
         initView();
         if(PreferenceHelper.readBoolean(ac,"shoppay","remember",false)){
